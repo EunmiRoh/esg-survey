@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESG AI 컨설팅 전문가 평가 설문</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --navy:#002555;--navy-d:#001A3D;--navy-l:#E8EDF5;--navy-ll:#F4F7FB;
+  --accent:#3F8CAA;--accent-l:#EBF4F8;
+  --white:#fff;--off:#F5F7FA;
+  --g1:#1C2340;--g2:#4A5270;--g3:#8890A8;
+  --border:#DDE2EE;
+  --auto:#00A050;--auto-l:#E6F9EF;
+  --cond:#E07B00;--cond-l:#FFF4E5;
+  --hitl:#C0392B;--hitl-l:#FDECEB;
+  --font:"Noto Sans KR",sans-serif;--mono:"JetBrains Mono",monospace;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:var(--font);background:var(--off);color:var(--g1);line-height:1.6;min-height:100vh;}
+.wrap{max-width:880px;margin:0 auto;padding:32px 20px 80px;}
+
+/* 상단 바 */
+.topbar{background:var(--navy);color:#fff;padding:18px 24px;border-radius:8px 8px 0 0;}
+.topbar-logo{font-size:10px;font-weight:700;letter-spacing:2.5px;color:rgba(255,255,255,.5);text-transform:uppercase;margin-bottom:4px;}
+.topbar-title{font-size:18px;font-weight:900;line-height:1.3;}
+.topbar-sub{font-size:11px;color:rgba(255,255,255,.5);margin-top:4px;}
+
+/* 카드 */
+.card{background:var(--white);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;padding:28px;}
+
+/* 상태 카드 (에러용) */
+.state{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:48px 32px;text-align:center;margin-top:24px;}
+.state-icon{font-size:48px;margin-bottom:16px;}
+.state-title{font-size:18px;font-weight:700;color:var(--navy);margin-bottom:8px;}
+.state-desc{font-size:13px;color:var(--g2);max-width:480px;margin:0 auto;}
+.state.err .state-icon{color:var(--hitl);}
+.state.warn .state-icon{color:var(--cond);}
+.state.done .state-icon{color:var(--auto);}
+
+/* 회사 정보 박스 */
+.section-title{font-size:13px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--navy-l);}
+.section-title:not(:first-child){margin-top:32px;}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 24px;margin-bottom:8px;}
+.info-row{display:flex;flex-direction:column;}
+.info-label{font-size:11px;color:var(--g3);font-weight:600;text-transform:uppercase;letter-spacing:.3px;}
+.info-value{font-size:14px;color:var(--g1);font-weight:600;margin-top:2px;}
+.info-value .badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;font-family:var(--mono);}
+.badge.a{background:#EBF5EE;color:#1B7A3D;}
+.badge.b{background:var(--accent-l);color:var(--accent);}
+.badge.c{background:var(--cond-l);color:var(--cond);}
+.badge.d{background:var(--hitl-l);color:var(--hitl);}
+
+/* 보고서 다운로드 */
+.report-list{display:flex;flex-direction:column;gap:8px;}
+.report-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--navy-ll);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--g1);transition:all .15s;}
+.report-item:hover{background:var(--navy-l);border-color:var(--accent);}
+.report-icon{font-size:22px;}
+.report-name{flex:1;font-size:13px;font-weight:600;}
+.report-hint{font-size:11px;color:var(--g3);}
+.report-empty{padding:16px;background:var(--cond-l);color:var(--cond);border-radius:6px;font-size:12px;text-align:center;}
+
+/* 안내 박스 */
+.notice{background:var(--accent-l);border-left:3px solid var(--accent);padding:14px 16px;border-radius:4px;font-size:12px;color:var(--g2);margin-bottom:16px;line-height:1.7;}
+.notice strong{color:var(--navy);}
+
+/* 폼 placeholder (Day 2에 채울 곳) */
+.form-placeholder{background:var(--off);border:2px dashed var(--border);border-radius:8px;padding:48px 24px;text-align:center;color:var(--g3);font-size:13px;}
+
+/* 로딩 */
+.loading{text-align:center;padding:64px 24px;color:var(--g3);font-size:13px;}
+.loading::before{content:'';display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:12px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* 푸터 */
+.foot{text-align:center;font-size:11px;color:var(--g3);margin-top:32px;line-height:1.7;}
+
+@media(max-width:640px){
+  .wrap{padding:16px 12px 40px;}
+  .card{padding:20px;}
+  .state{padding:32px 20px;}
+  .info-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- 상단 바 (항상 보임) -->
+  <div class="topbar">
+    <div class="topbar-logo">ESG-AACS · Hansung Univ.</div>
+    <div class="topbar-title">ESG AI 컨설팅 전문가 평가 설문</div>
+    <div class="topbar-sub">한성대학교 박사학위 연구 · 노은미 · v4.0 5점 리커트</div>
+  </div>
+
+  <!-- 메인 영역: JS가 상태에 따라 콘텐츠 교체 -->
+  <div id="main">
+    <div class="loading">설문 정보를 불러오는 중...</div>
+  </div>
+
+  <div class="foot">
+    한성대학교 대학원 스마트융합컨설팅학과 · 연구자 노은미 (eunm2roh@gmail.com)<br>
+    응답은 익명으로 처리되며, 박사학위 논문 측정도구 검증 목적으로만 사용됩니다.
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// Supabase 연결 (어드민과 동일한 프로젝트, anon key)
+// ============================================================
+const SUPABASE_URL = 'https://mwkdtasjkktqqlqefdhr.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13a2R0YXNqa2t0cXFscWVmZGhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NzkxNzQsImV4cCI6MjA4OTQ1NTE3NH0.hdYLzfThbBsFpGnTCvB4CEpm0BX0ZVrd4eMKkn7T_5g';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const STORAGE_BUCKET = 'sample-reports';
+
+// ============================================================
+// 진입 — URL에서 토큰 추출 후 검증
+// ============================================================
+let invitation = null;   // survey_invitations 행
+let diagnosis = null;    // diagnosis_results 행
+let reports = [];        // Storage 버킷에서 찾은 파일 목록
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+
+  if (!token) {
+    return renderState('err', '🚫', '잘못된 접근입니다',
+      '이 페이지는 연구자가 발급한 검증 링크를 통해서만 접근할 수 있습니다. 받으신 링크를 다시 확인해주세요.');
+  }
+
+  await loadByToken(token);
+});
+
+// ============================================================
+// 토큰 검증 + 데이터 로드
+// ============================================================
+async function loadByToken(token) {
+  try {
+    // 1. survey_invitations에서 토큰 조회
+    const { data: invs, error: e1 } = await sb
+      .from('survey_invitations')
+      .select('*')
+      .eq('token', token)
+      .limit(1);
+
+    if (e1) throw e1;
+    if (!invs || invs.length === 0) {
+      return renderState('err', '🚫', '유효하지 않은 링크입니다',
+        '이 토큰은 시스템에 등록되어 있지 않습니다. 링크가 정확한지 다시 확인해주시고, 문제가 지속되면 연구자(eunm2roh@gmail.com)에게 문의해주세요.');
+    }
+
+    invitation = invs[0];
+
+    // 2. 만료 확인
+    if (invitation.expires_at && new Date(invitation.expires_at) < new Date()) {
+      return renderState('warn', '⏰', '만료된 링크입니다',
+        '이 검증 링크는 만료되었습니다. 연구자(eunm2roh@gmail.com)에게 새 링크 발급을 요청해주세요.');
+    }
+
+    // 3. 이미 완료된 응답
+    if (invitation.status === 'completed') {
+      return renderState('done', '✅', '이미 응답이 완료된 링크입니다',
+        '이 링크에 대한 설문 응답은 이미 제출되었습니다. 응답에 진심으로 감사드립니다. 추가 의견이 있으시면 연구자(eunm2roh@gmail.com)에게 직접 연락주시면 됩니다.');
+    }
+
+    // 4. diagnosis_results 조회
+    const { data: diags, error: e2 } = await sb
+      .from('diagnosis_results')
+      .select('*')
+      .eq('id', invitation.diagnosis_id)
+      .limit(1);
+
+    if (e2) throw e2;
+    if (!diags || diags.length === 0) {
+      return renderState('err', '⚠️', '진단 결과를 찾을 수 없습니다',
+        '연결된 진단 결과가 시스템에서 삭제되었거나 접근할 수 없습니다. 연구자에게 문의해주세요.');
+    }
+
+    diagnosis = diags[0];
+
+    // 5. Storage에서 보고서 파일 목록 가져오기
+    //    파일 경로 규칙: sample-reports/{diagnosis_id}/{filename}
+    //    Day 1-C에서 어드민이 이 경로로 업로드 예정
+    await loadReports(diagnosis.id);
+
+    // 6. 정상 화면 렌더링
+    renderSurvey();
+
+  } catch (err) {
+    console.error('[loadByToken]', err);
+    renderState('err', '⚠️', '시스템 오류',
+      '데이터를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주시거나 연구자에게 문의해주세요.<br><br><code style="font-size:11px;color:var(--g3)">' + (err.message || err) + '</code>');
+  }
+}
+
+// ============================================================
+// Storage에서 보고서 파일 목록 로드
+// ============================================================
+async function loadReports(diagnosisId) {
+  try {
+    const { data: files, error } = await sb
+      .storage
+      .from(STORAGE_BUCKET)
+      .list(diagnosisId, { limit: 20, sortBy: { column: 'name', order: 'asc' } });
+
+    if (error) {
+      console.warn('[loadReports] list 실패:', error);
+      reports = [];
+      return;
+    }
+
+    reports = (files || []).filter(f => f.name && !f.name.startsWith('.')).map(f => {
+      const path = `${diagnosisId}/${f.name}`;
+      const { data: pub } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+      return {
+        name: f.name,
+        url: pub.publicUrl,
+        size: f.metadata?.size || 0,
+        type: detectType(f.name),
+      };
+    });
+  } catch (err) {
+    console.warn('[loadReports]', err);
+    reports = [];
+  }
+}
+
+function detectType(filename) {
+  const lower = filename.toLowerCase();
+  if (lower.includes('자가진단') || lower.includes('selfassessment') || lower.includes('self_assessment')) return '자가진단';
+  if (lower.includes('컨설팅') || lower.includes('consulting')) return '컨설팅 보고서';
+  if (lower.includes('증빙') || lower.includes('evidence')) return '증빙자료';
+  if (lower.endsWith('.pdf')) return 'PDF 문서';
+  if (lower.endsWith('.docx') || lower.endsWith('.doc')) return 'Word 문서';
+  if (lower.endsWith('.zip')) return 'ZIP 압축파일';
+  return '문서';
+}
+
+function fileIcon(type) {
+  if (type === '자가진단') return '📋';
+  if (type === '컨설팅 보고서') return '📝';
+  if (type === '증빙자료') return '📎';
+  if (type === 'ZIP 압축파일') return '🗂️';
+  if (type === 'Word 문서') return '📄';
+  return '📄';
+}
+
+function fileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1024/1024).toFixed(1) + ' MB';
+}
+
+// ============================================================
+// 화면 렌더링 — 에러/완료 상태
+// ============================================================
+function renderState(kind, icon, title, desc) {
+  document.getElementById('main').innerHTML = `
+    <div class="state ${kind}">
+      <div class="state-icon">${icon}</div>
+      <div class="state-title">${title}</div>
+      <div class="state-desc">${desc}</div>
+    </div>
+  `;
+}
+
+// ============================================================
+// 화면 렌더링 — 정상 (회사 정보 + 보고서 + 폼 자리)
+// ============================================================
+function renderSurvey() {
+  const d = diagnosis;
+  const gradeClass = (d.grade || '').startsWith('A') ? 'a'
+                   : (d.grade || '').startsWith('B') ? 'b'
+                   : d.grade === 'C' ? 'c' : 'd';
+
+  // 보고서 목록 HTML
+  let reportsHtml;
+  if (reports.length === 0) {
+    reportsHtml = `<div class="report-empty">⚠️ 첨부된 보고서가 아직 없습니다. 연구자에게 문의해주세요.</div>`;
+  } else {
+    reportsHtml = `<div class="report-list">` + reports.map(r => `
+      <a class="report-item" href="${r.url}" target="_blank" rel="noopener">
+        <div class="report-icon">${fileIcon(r.type)}</div>
+        <div class="report-name">${escapeHtml(r.name)}</div>
+        <div class="report-hint">${r.type}${r.size ? ' · ' + fileSize(r.size) : ''} · 새 탭에서 열기</div>
+      </a>
+    `).join('') + `</div>`;
+  }
+
+  document.getElementById('main').innerHTML = `
+    <div class="card">
+
+      <div class="notice">
+        <strong>■ 평가 대상</strong> AI(Agent 2: RAG+KG)가 자동 생성한 ESG 컨설팅 보고서 샘플 1건<br>
+        <strong>■ 평가 방식</strong> 5개 품질 차원 5점 리커트 평가 + AI 자동채점 상호검증 + 종합 판단<br>
+        <strong>■ 소요 시간</strong> 약 7분 · <strong>■ 익명 처리</strong> 응답은 익명, 박사논문 측정도구 검증 목적으로만 사용
+      </div>
+
+      <div class="section-title">평가 대상 기업 정보</div>
+      <div class="info-grid">
+        <div class="info-row"><span class="info-label">업체명</span><span class="info-value">${escapeHtml(d.company_name || '—')}</span></div>
+        <div class="info-row"><span class="info-label">업종</span><span class="info-value">${escapeHtml(d.company_industry || '—')}</span></div>
+        <div class="info-row"><span class="info-label">규모</span><span class="info-value">${escapeHtml(d.company_size || '—')}</span></div>
+        <div class="info-row"><span class="info-label">종합 점수</span><span class="info-value" style="font-family:var(--mono)">${d.score ?? '—'}</span></div>
+        <div class="info-row"><span class="info-label">등급</span><span class="info-value"><span class="badge ${gradeClass}">${escapeHtml(d.grade || '—')}</span></span></div>
+        <div class="info-row"><span class="info-label">E / S / G</span><span class="info-value" style="font-family:var(--mono);font-size:13px">${d.e_score ?? '—'} / ${d.s_score ?? '—'} / ${d.g_score ?? '—'}</span></div>
+      </div>
+
+      <div class="section-title">첨부 보고서 — 평가 전 반드시 검토</div>
+      ${reportsHtml}
+
+      <div class="section-title">전문가 평가</div>
+      <div class="form-placeholder">
+        ⚙️ 설문 폼은 Day 2 작업에서 추가됩니다<br>
+        <span style="font-size:11px;margin-top:6px;display:inline-block">
+          (Part 1 평가자 정보 · Part 2-A 5차원 리커트 · Part 2-B 상호검증 · Part 2-C 종합판단 · Part 3 자유의견)
+        </span>
+      </div>
+
+    </div>
+  `;
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+
+</body>
+</html>
