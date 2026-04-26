@@ -7,7 +7,7 @@ ESG AI 컨설팅 전문가 평가 설문 사이트 — 한성대학교 박사학
 - **단일 HTML** (`index.html`) + Vanilla JS + Supabase 직접 호출
 - 어드민(`esg-agent-admin`)과 **같은 Supabase 프로젝트** 공유
   - URL: `https://mwkdtasjkktqqlqefdhr.supabase.co`
-  - Anon Key 사용 (어드민과 동일 패턴)
+  - Anon Key 사용
 - Vercel 자동 배포 (main 푸시 시)
 
 ## 진입 방식
@@ -24,12 +24,14 @@ ESG AI 컨설팅 전문가 평가 설문 사이트 — 한성대학교 박사학
 
 ## Storage
 
-- 버킷: `sample-reports`
-- 경로 규칙: `{diagnosis_id}/{filename}` (어드민이 업로드)
+- 버킷: `esg-reports` (PUBLIC, esg-platform과 공유)
+- 경로 규칙: `{diagnosis_id}/{filename}`
+- 표시 대상: `consulting.pdf`, `self-assessment.pdf`, 5종 워드 (E-01, S-01, E-08, E-09, G-01)
+- 무시 대상: `evidence/` 폴더 (esg-platform 자동 생성, 평가용 아님)
 
 ## 일정
 
-- 5/11(월): 전문가 설문 오픈 (D-15)
+- 5/11(월): 전문가 설문 오픈
 
 ## 작업 사이클
 
