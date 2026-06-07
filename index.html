@@ -487,8 +487,12 @@ async function loadByToken(token) {
     //    esg-platform이 PDF 2종 자동 업로드, 박사님이 워드 5종 업로드
     await loadReports(diagnosis.id);
 
-    // 6. 정상 화면 렌더링
-    renderSurvey();
+    // 6. 정상 화면 렌더링 — 응답자 유형 분기 (expert/demand)
+    if (invitation.respondent_type === 'demand') {
+      renderDemandForm();
+    } else {
+      renderExpertForm();
+    }
 
   } catch (err) {
     console.error('[loadByToken]', err);
@@ -582,9 +586,10 @@ function renderState(kind, icon, title, desc) {
 }
 
 // ============================================================
-// 화면 렌더링 — 정상 (회사 정보 + 보고서 + 폼 자리)
+// 화면 렌더링 — 전문가 폼 (기존 흐름 그대로, 함수로만 감쌈)
 // ============================================================
-function renderSurvey() {
+function renderExpertForm() {
+  requiredFieldNames = EXPERT_REQUIRED_FIELDS;
   const d = diagnosis;
   const gradeClass = (d.grade || '').startsWith('A') ? 'a'
                    : (d.grade || '').startsWith('B') ? 'b'
@@ -1068,6 +1073,379 @@ function renderSurvey() {
   `;
 }
 
+// ============================================================
+// 화면 렌더링 — 수요기업 폼 (respondent_type='demand')
+// ============================================================
+function renderDemandForm() {
+  requiredFieldNames = DEMAND_REQUIRED_FIELDS;
+
+  // 상단 바 문구를 수요기업용으로 교체
+  document.title = 'ESG AI 컨설팅 수요기업 평가 설문';
+  const tbTitle = document.querySelector('.topbar-title');
+  const tbSub = document.querySelector('.topbar-sub');
+  if (tbTitle) tbTitle.textContent = 'ESG AI 컨설팅 수요기업 평가 설문';
+  if (tbSub) tbSub.textContent = '한성대학교 박사학위 연구 · 노은미 · 수요기업 검증';
+
+  const d = diagnosis;
+  const gradeClass = (d.grade || '').startsWith('A') ? 'a'
+                   : (d.grade || '').startsWith('B') ? 'b'
+                   : d.grade === 'C' ? 'c' : 'd';
+
+  // 보고서 목록 HTML (esg-reports 버킷의 자가진단·컨설팅·증빙 5종 그대로 노출)
+  let reportsHtml;
+  if (reports.length === 0) {
+    reportsHtml = `<div class="report-empty">⚠️ 첨부된 보고서가 아직 없습니다. 연구자에게 문의해주세요.</div>`;
+  } else {
+    reportsHtml = `<div class="report-list">` + reports.map(r => `
+      <a class="report-item" href="${r.url}" target="_blank" rel="noopener">
+        <div class="report-icon">${fileIcon(r.type)}</div>
+        <div class="report-name">${escapeHtml(r.name)}</div>
+        <div class="report-hint">${r.type}${r.size ? ' · ' + fileSize(r.size) : ''} · 새 탭에서 열기</div>
+      </a>
+    `).join('') + `</div>`;
+  }
+
+  document.getElementById('main').innerHTML = `
+    <div class="card">
+
+      <div class="notice">
+        <strong>■ 평가 대상</strong> ① 자가진단 결과보고서 ② 맞춤형 컨설팅 보고서 ③ 증빙서식 5종 (아래 첨부 파일)<br>
+        <strong>■ 진행 방식</strong> 온라인 설문 · 약 5분 소요 · <strong>■ 익명 처리</strong> 응답은 익명으로 처리되며 박사학위 논문 연구 목적으로만 사용됩니다.<br>
+        <strong>■ 자가진단 체험</strong> <a href="https://esg-platform-v8.vercel.app" target="_blank" rel="noopener">esg-platform-v8.vercel.app</a> 에서 ESG 자가진단을 직접 체험해보실 수 있습니다.
+      </div>
+
+      <div class="section-title">샘플 기업 정보</div>
+      <div class="info-grid">
+        <div class="info-row"><span class="info-label">업체명</span><span class="info-value">${escapeHtml(d.company_name || '—')}</span></div>
+        <div class="info-row"><span class="info-label">업종</span><span class="info-value">${escapeHtml(d.company_industry || '—')}</span></div>
+        <div class="info-row"><span class="info-label">규모</span><span class="info-value">${escapeHtml(d.company_size || '—')}</span></div>
+        <div class="info-row"><span class="info-label">종합 점수</span><span class="info-value" style="font-family:var(--mono)">${d.score ?? '—'}</span></div>
+        <div class="info-row"><span class="info-label">등급</span><span class="info-value"><span class="badge ${gradeClass}">${escapeHtml(d.grade || '—')}</span></span></div>
+        <div class="info-row"><span class="info-label">E / S / G</span><span class="info-value" style="font-family:var(--mono);font-size:13px">${d.e_score ?? '—'} / ${d.s_score ?? '—'} / ${d.g_score ?? '—'}</span></div>
+      </div>
+
+      <div class="section-title">첨부 자료 — 응답 전 살펴봐 주세요</div>
+      ${reportsHtml}
+
+      <!-- 진행률 바 -->
+      <div class="progress-wrap">
+        <div class="progress-label"><span id="progress-pct">0</span>% 완료</div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      </div>
+
+      <form id="surveyForm" onsubmit="return submitDemandSurvey(event)">
+
+      <!-- ============ Part 1: 기업 정보 ============ -->
+      <div class="section-title">Part 1. 기업 정보</div>
+
+      <div class="form-group">
+        <label class="form-label">회사명</label>
+        <input type="text" name="company_name" class="form-input" placeholder="예: ○○산업 (선택)" maxlength="60">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label required">업종</label>
+        <div class="radio-group">
+          <label class="radio"><input type="radio" name="company_industry" value="manufacturing" required><span>제조업</span></label>
+          <label class="radio"><input type="radio" name="company_industry" value="ict"><span>정보통신(ICT)</span></label>
+          <label class="radio"><input type="radio" name="company_industry" value="retail"><span>도소매·유통</span></label>
+          <label class="radio"><input type="radio" name="company_industry" value="construction"><span>건설업</span></label>
+          <label class="radio"><input type="radio" name="company_industry" value="service"><span>서비스업</span></label>
+          <label class="radio"><input type="radio" name="company_industry" value="other"><span>기타</span></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label required">회사 규모 (상시 근로자 수)</label>
+        <div class="radio-group">
+          <label class="radio"><input type="radio" name="company_size" value="lt10" required><span>10인 미만</span></label>
+          <label class="radio"><input type="radio" name="company_size" value="10to49"><span>10~49인</span></label>
+          <label class="radio"><input type="radio" name="company_size" value="50to99"><span>50~99인</span></label>
+          <label class="radio"><input type="radio" name="company_size" value="100to299"><span>100~299인</span></label>
+          <label class="radio"><input type="radio" name="company_size" value="gte300"><span>300인 이상</span></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">직책·담당 업무</label>
+        <input type="text" name="respondent_role" class="form-input" placeholder="예: 경영지원팀 과장 (선택)" maxlength="60">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label required">ESG 업무 경험</label>
+        <div class="radio-group">
+          <label class="radio"><input type="radio" name="esg_tenure" value="none" required><span>없음</span></label>
+          <label class="radio"><input type="radio" name="esg_tenure" value="lt1"><span>1년 미만</span></label>
+          <label class="radio"><input type="radio" name="esg_tenure" value="1to3"><span>1~3년</span></label>
+          <label class="radio"><input type="radio" name="esg_tenure" value="3to5"><span>3~5년</span></label>
+          <label class="radio"><input type="radio" name="esg_tenure" value="gte5"><span>5년 이상</span></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">우리 회사의 ESG 현황 (해당하는 항목 모두 선택)</label>
+        <div class="radio-group radio-vertical">
+          <label class="radio"><input type="checkbox" name="esg_status" value="has_team"><span>ESG 전담 조직(팀·담당자)이 있다</span></label>
+          <label class="radio"><input type="checkbox" name="esg_status" value="has_audit"><span>ESG 평가·실사를 받아본 적이 있다</span></label>
+          <label class="radio"><input type="checkbox" name="esg_status" value="has_request"><span>거래처(원청·고객사)로부터 ESG 자료 요청을 받은 적이 있다</span></label>
+          <label class="radio"><input type="checkbox" name="esg_status" value="none"><span>해당 사항 없음</span></label>
+        </div>
+      </div>
+
+      <!-- ============ Part 2: 보고서 품질 평가 (5차원, 풀어쓰기) ============ -->
+      <div class="section-title">Part 2. 보고서 품질 평가 <span class="section-hint">(각 1~5점)</span></div>
+
+      <div class="notice notice-sm">
+        첨부된 <strong>컨설팅 보고서와 증빙서식</strong>을 보시고 답해주세요. <strong>5점 척도</strong>: 1점 매우 미흡 / 2점 미흡 / 3점 보통 / 4점 우수 / 5점 매우 우수
+      </div>
+
+      <div class="dim-card">
+        <div class="dim-title">1. 개선 과제가 구체적인가요?</div>
+        <div class="dim-desc">보고서의 개선 과제에 수치·기한·담당이 명확하게 제시되어 있는지 평가해주세요.</div>
+        <div class="likert">
+          <label><input type="radio" name="score_specificity" value="1" required><span>1</span></label>
+          <label><input type="radio" name="score_specificity" value="2"><span>2</span></label>
+          <label><input type="radio" name="score_specificity" value="3"><span>3</span></label>
+          <label><input type="radio" name="score_specificity" value="4"><span>4</span></label>
+          <label><input type="radio" name="score_specificity" value="5"><span>5</span></label>
+        </div>
+      </div>
+
+      <div class="dim-card">
+        <div class="dim-title">2. 우리 회사가 실제로 실행할 수 있는 내용인가요?</div>
+        <div class="dim-desc">제시된 개선 과제가 우리 회사의 예산·인력·시간으로 실행 가능한 수준인지 평가해주세요.</div>
+        <div class="likert">
+          <label><input type="radio" name="score_feasibility" value="1" required><span>1</span></label>
+          <label><input type="radio" name="score_feasibility" value="2"><span>2</span></label>
+          <label><input type="radio" name="score_feasibility" value="3"><span>3</span></label>
+          <label><input type="radio" name="score_feasibility" value="4"><span>4</span></label>
+          <label><input type="radio" name="score_feasibility" value="5"><span>5</span></label>
+        </div>
+      </div>
+
+      <div class="dim-card">
+        <div class="dim-title">3. 우리 업종에 맞는 내용인가요?</div>
+        <div class="dim-desc">보고서의 내용이 해당 업종의 특성과 주요 이슈를 잘 반영하고 있는지 평가해주세요.</div>
+        <div class="likert">
+          <label><input type="radio" name="score_industry_fit" value="1" required><span>1</span></label>
+          <label><input type="radio" name="score_industry_fit" value="2"><span>2</span></label>
+          <label><input type="radio" name="score_industry_fit" value="3"><span>3</span></label>
+          <label><input type="radio" name="score_industry_fit" value="4"><span>4</span></label>
+          <label><input type="radio" name="score_industry_fit" value="5"><span>5</span></label>
+        </div>
+      </div>
+
+      <div class="dim-card">
+        <div class="dim-title">4. 보고서가 체계적으로 정리되어 있나요?</div>
+        <div class="dim-desc">우선순위와 분류가 명확하고, 읽고 이해하기 쉽게 구성되어 있는지 평가해주세요.</div>
+        <div class="likert">
+          <label><input type="radio" name="score_structure" value="1" required><span>1</span></label>
+          <label><input type="radio" name="score_structure" value="2"><span>2</span></label>
+          <label><input type="radio" name="score_structure" value="3"><span>3</span></label>
+          <label><input type="radio" name="score_structure" value="4"><span>4</span></label>
+          <label><input type="radio" name="score_structure" value="5"><span>5</span></label>
+        </div>
+      </div>
+
+      <div class="dim-card">
+        <div class="dim-title">5. 근거·출처가 명확한가요?</div>
+        <div class="dim-desc">개선 과제의 근거(법규·기준 등)와 출처가 명확하게 제시되어 있는지 평가해주세요.</div>
+        <div class="likert">
+          <label><input type="radio" name="score_traceability" value="1" required><span>1</span></label>
+          <label><input type="radio" name="score_traceability" value="2"><span>2</span></label>
+          <label><input type="radio" name="score_traceability" value="3"><span>3</span></label>
+          <label><input type="radio" name="score_traceability" value="4"><span>4</span></label>
+          <label><input type="radio" name="score_traceability" value="5"><span>5</span></label>
+        </div>
+      </div>
+
+      <!-- ============ Part 3: 만족도·활용성 ============ -->
+      <div class="section-title">Part 3. 만족도·활용성</div>
+
+      <div class="dim-card">
+        <div class="dim-title">전반적 만족도</div>
+        <div class="dim-desc">제공된 자료(자가진단·컨설팅 보고서·증빙서식) 전반에 대해 얼마나 만족하시나요? (1점 매우 불만족 ~ 5점 매우 만족)</div>
+        <div class="likert">
+          <label><input type="radio" name="overall_satisfaction" value="1" required><span>1</span></label>
+          <label><input type="radio" name="overall_satisfaction" value="2"><span>2</span></label>
+          <label><input type="radio" name="overall_satisfaction" value="3"><span>3</span></label>
+          <label><input type="radio" name="overall_satisfaction" value="4"><span>4</span></label>
+          <label><input type="radio" name="overall_satisfaction" value="5"><span>5</span></label>
+        </div>
+      </div>
+
+      <div class="dim-card">
+        <div class="dim-title">도입 의향</div>
+        <div class="dim-desc">이러한 서비스가 정식으로 제공된다면 우리 회사에서 활용할 의향이 있으신가요? (1점 전혀 없다 ~ 5점 매우 높다)</div>
+        <div class="likert">
+          <label><input type="radio" name="adoption_intent" value="1" required><span>1</span></label>
+          <label><input type="radio" name="adoption_intent" value="2"><span>2</span></label>
+          <label><input type="radio" name="adoption_intent" value="3"><span>3</span></label>
+          <label><input type="radio" name="adoption_intent" value="4"><span>4</span></label>
+          <label><input type="radio" name="adoption_intent" value="5"><span>5</span></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label required">컨설팅 보고서를 우리 회사 ESG 업무에 활용한다면?</label>
+        <div class="radio-group radio-vertical">
+          <label class="radio"><input type="radio" name="c2_provision_readiness" value="as_is" required><span>그대로 활용 가능</span></label>
+          <label class="radio"><input type="radio" name="c2_provision_readiness" value="minor_edit"><span>일부 수정 후 활용 가능</span></label>
+          <label class="radio"><input type="radio" name="c2_provision_readiness" value="major_edit"><span>상당한 수정이 필요</span></label>
+          <label class="radio"><input type="radio" name="c2_provision_readiness" value="unusable"><span>활용하기 어려움</span></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label required">유료 컨설팅과 비교했을 때, 이 자료의 가치는 어느 정도라고 보시나요?</label>
+        <div class="radio-group radio-vertical">
+          <label class="radio"><input type="radio" name="value_vs_paid" value="very_useful" required><span>매우 유용 — 유료 컨설팅 못지않다</span></label>
+          <label class="radio"><input type="radio" name="value_vs_paid" value="useful"><span>유용 — 충분히 참고할 만하다</span></label>
+          <label class="radio"><input type="radio" name="value_vs_paid" value="moderate"><span>보통</span></label>
+          <label class="radio"><input type="radio" name="value_vs_paid" value="low"><span>낮음</span></label>
+          <label class="radio"><input type="radio" name="value_vs_paid" value="none"><span>거의 없음</span></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label required">이 서비스의 가장 큰 장점은 무엇이라고 생각하시나요?</label>
+        <div class="radio-group radio-vertical">
+          <label class="radio"><input type="radio" name="c4_top_advantage" value="cost" required><span>비용 절감</span></label>
+          <label class="radio"><input type="radio" name="c4_top_advantage" value="time"><span>시간 단축</span></label>
+          <label class="radio"><input type="radio" name="c4_top_advantage" value="direction"><span>무엇부터 해야 할지 방향 제시</span></label>
+          <label class="radio"><input type="radio" name="c4_top_advantage" value="template"><span>바로 쓸 수 있는 서식(증빙자료) 제공</span></label>
+          <label class="radio"><input type="radio" name="c4_top_advantage" value="access"><span>쉬운 접근성 (언제든 이용 가능)</span></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label required">가장 우려되는 점은 무엇인가요?</label>
+        <div class="radio-group radio-vertical">
+          <label class="radio"><input type="radio" name="c5_top_concern" value="legal" required><span>법규 내용의 정확성</span></label>
+          <label class="radio"><input type="radio" name="c5_top_concern" value="industry"><span>우리 업종 특성 반영 부족</span></label>
+          <label class="radio"><input type="radio" name="c5_top_concern" value="liability"><span>문제 발생 시 책임 소재</span></label>
+          <label class="radio"><input type="radio" name="c5_top_concern" value="leak"><span>회사 정보 유출</span></label>
+          <label class="radio"><input type="radio" name="c5_top_concern" value="trust"><span>AI에 대한 신뢰 부족</span></label>
+        </div>
+      </div>
+
+      <div class="dim-card">
+        <div class="dim-title">추천 의향</div>
+        <div class="dim-desc">다른 회사에 이 서비스를 추천하시겠습니까? (1점 전혀 아니다 ~ 5점 매우 그렇다)</div>
+        <div class="likert">
+          <label><input type="radio" name="nps_recommend" value="1" required><span>1</span></label>
+          <label><input type="radio" name="nps_recommend" value="2"><span>2</span></label>
+          <label><input type="radio" name="nps_recommend" value="3"><span>3</span></label>
+          <label><input type="radio" name="nps_recommend" value="4"><span>4</span></label>
+          <label><input type="radio" name="nps_recommend" value="5"><span>5</span></label>
+        </div>
+      </div>
+
+      <!-- ============ Part 4: 자유 의견 ============ -->
+      <div class="section-title">Part 4. 자유 의견 <span class="section-hint">(선택)</span></div>
+
+      <div class="form-group">
+        <label class="form-label">이 자료(보고서·서식)가 가장 도움이 될 것 같은 부분은 무엇인가요?</label>
+        <textarea name="free_help" class="form-textarea" rows="3" maxlength="1000" placeholder="자유롭게 작성해주세요. (선택)"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">부족하거나 아쉬운 부분이 있다면 알려주세요.</label>
+        <textarea name="free_gap" class="form-textarea" rows="3" maxlength="1000" placeholder="자유롭게 작성해주세요. (선택)"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">추가로 제공되었으면 하는 자료나 기능이 있다면 알려주세요.</label>
+        <textarea name="free_wish" class="form-textarea" rows="3" maxlength="1000" placeholder="자유롭게 작성해주세요. (선택)"></textarea>
+      </div>
+
+      <!-- ============ 제출 버튼 ============ -->
+      <div class="submit-wrap">
+        <button type="submit" class="btn-submit" id="btnSubmit">설문 제출하기</button>
+        <div class="submit-hint">제출 후에는 응답을 수정할 수 없습니다. 설문에 응해주셔서 진심으로 감사드립니다.</div>
+      </div>
+
+      </form>
+
+    </div>
+  `;
+}
+
+// ============================================================
+// 폼 제출 — 수요기업
+// ============================================================
+async function submitDemandSurvey(event) {
+  event.preventDefault();
+
+  if (!invitation || !invitation.id) {
+    alert('초대 정보가 없습니다. 페이지를 새로고침해주세요.');
+    return false;
+  }
+
+  const form = event.target;
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true;
+  btn.textContent = '제출 중...';
+
+  try {
+    const fd = new FormData(form);
+    const freeParts = [fd.get('free_help'), fd.get('free_gap'), fd.get('free_wish')]
+      .map(v => (v || '').trim()).filter(Boolean);
+    const esgStatus = fd.getAll('esg_status');
+
+    const payload = {
+      invitation_id: invitation.id,
+      respondent_type: 'demand',
+
+      // Part 1 기업 정보
+      company_name: (fd.get('company_name') || '').trim() || null,
+      company_industry: fd.get('company_industry'),
+      company_size: fd.get('company_size'),
+      respondent_role: (fd.get('respondent_role') || '').trim() || null,
+      esg_tenure: fd.get('esg_tenure'),
+      esg_status: esgStatus.length ? esgStatus : null,
+
+      // Part 2 5차원 (smallint)
+      score_specificity: parseInt(fd.get('score_specificity'), 10),
+      score_feasibility: parseInt(fd.get('score_feasibility'), 10),
+      score_industry_fit: parseInt(fd.get('score_industry_fit'), 10),
+      score_structure: parseInt(fd.get('score_structure'), 10),
+      score_traceability: parseInt(fd.get('score_traceability'), 10),
+
+      // Part 3 만족도·활용성
+      overall_satisfaction: parseInt(fd.get('overall_satisfaction'), 10),
+      adoption_intent: parseInt(fd.get('adoption_intent'), 10),
+      c2_provision_readiness: fd.get('c2_provision_readiness'),
+      value_vs_paid: fd.get('value_vs_paid'),
+      c4_top_advantage: fd.get('c4_top_advantage'),
+      c5_top_concern: fd.get('c5_top_concern'),
+      nps_recommend: parseInt(fd.get('nps_recommend'), 10),
+
+      // Part 4 자유 의견 → free_comment 통합
+      free_comment: freeParts.join('\n---\n') || null,
+
+      // 메타
+      user_agent: navigator.userAgent.substring(0, 500),
+      ip_hash: null,
+    };
+
+    const { error } = await sb.from('survey_responses').insert(payload);
+    if (error) throw error;
+
+    // 트리거가 자동으로 invitations.status = 'completed' 처리함
+    renderState('done', '✅', '설문이 성공적으로 제출되었습니다',
+      '응답에 진심으로 감사드립니다. 박사학위 연구의 소중한 검증 자료로 활용됩니다.<br><br>창을 닫으셔도 됩니다.');
+
+  } catch (err) {
+    console.error('[submitDemandSurvey]', err);
+    btn.disabled = false;
+    btn.textContent = '설문 제출하기';
+    alert('제출 중 오류가 발생했습니다:\n' + (err.message || err) + '\n\n잠시 후 다시 시도하시거나 연구자에게 문의해주세요.');
+  }
+
+  return false;
+}
+
 function escapeHtml(s) {
   if (s == null) return '';
   return String(s)
@@ -1078,27 +1456,35 @@ function escapeHtml(s) {
 // ============================================================
 // 진행률 추적
 // ============================================================
+// 필수 항목 목록 (유형별) — render 함수가 requiredFieldNames를 교체
+const EXPERT_REQUIRED_FIELDS = [
+  'expert_field', 'esg_career', 'esg_consulting_count', 'main_target',
+  'score_specificity', 'score_feasibility', 'score_industry_fit',
+  'score_structure', 'score_traceability',
+  'b1_hallucination', 'b2_hitl_required', 'b3_ai_match',
+  'c1_quality_level', 'c2_provision_readiness', 'c3_replacement_potential',
+  'c4_top_advantage', 'c5_top_concern', 'c6_positioning'
+];
+const DEMAND_REQUIRED_FIELDS = [
+  'company_industry', 'company_size', 'esg_tenure',
+  'score_specificity', 'score_feasibility', 'score_industry_fit',
+  'score_structure', 'score_traceability',
+  'overall_satisfaction', 'adoption_intent', 'c2_provision_readiness',
+  'value_vs_paid', 'c4_top_advantage', 'c5_top_concern', 'nps_recommend'
+];
+let requiredFieldNames = EXPERT_REQUIRED_FIELDS;
+
 function updateProgress() {
   const form = document.getElementById('surveyForm');
   if (!form) return;
 
-  // 필수 항목 카운팅: name 속성 기반
-  const requiredFields = [
-    'expert_field', 'esg_career', 'esg_consulting_count', 'main_target',
-    'score_specificity', 'score_feasibility', 'score_industry_fit',
-    'score_structure', 'score_traceability',
-    'b1_hallucination', 'b2_hitl_required', 'b3_ai_match',
-    'c1_quality_level', 'c2_provision_readiness', 'c3_replacement_potential',
-    'c4_top_advantage', 'c5_top_concern', 'c6_positioning'
-  ];
-
   let answered = 0;
-  for (const fieldName of requiredFields) {
+  for (const fieldName of requiredFieldNames) {
     const checked = form.querySelector(`input[name="${fieldName}"]:checked`);
     if (checked) answered++;
   }
 
-  const total = requiredFields.length;
+  const total = requiredFieldNames.length;
   const pct = Math.round((answered / total) * 100);
 
   const fillEl = document.getElementById('progress-fill');
